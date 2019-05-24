@@ -24,7 +24,50 @@ import java.util.ArrayList;
 
 public class MainClass {
 
-	public static void URLReader(URL url, String currency, String start, String end, ArrayList<Float> buyData,
+	static void OutputPrinter(ArrayList<Float> buyData, ArrayList<Float> sellData) {
+		String formattedBuyVal = String.format("%.04f", getAverage(buyData));
+		String formattedSellVal = String.format("%.04f", getStandDev(sellData));
+
+		System.out.println(formattedBuyVal);
+		System.out.println(formattedSellVal);	
+	}
+	
+	public static void urlAccess(String inputData) throws IOException {
+		String currency = inputData.substring(0, 3);
+
+		String year_init = inputData.substring(4, 8);
+		String month_init = inputData.substring(9, 11);
+		String day_init = inputData.substring(12, 14);
+		String year_last = inputData.substring(15, 19);
+		String month_last = inputData.substring(20, 22);
+		String day_last = inputData.substring(23, 25);
+
+		String first_checker = year_init.substring(2, 4) + month_init + day_init;
+		String last_checker = year_last.substring(2, 4) + month_last + day_last;
+		
+		ArrayList<Float> buyData = new ArrayList<Float>();
+		ArrayList<Float> sellData = new ArrayList<Float>();
+		
+		String basic_url = "https://www.nbp.pl/kursy/xml/dir";
+		for (int year = Integer.parseInt(year_init); year <= Integer.parseInt(year_last); ++year) {
+			URL url = null;
+			try {
+				if (year != 2019) {
+					url = new URL(basic_url + Integer.toString(year) + ".txt");
+				} else {
+					url = new URL(basic_url + ".txt");
+				}
+			} catch (MalformedURLException e) {
+				e.printStackTrace();
+			}
+			
+			txtReader(url, currency, first_checker, last_checker, buyData, sellData);
+
+		}
+		OutputPrinter(buyData, sellData);
+	}
+
+	public static void txtReader(URL url, String currency, String start, String end, ArrayList<Float> buyData,
 			ArrayList<Float> sellData) throws IOException {
 		BufferedReader in = new BufferedReader(new InputStreamReader(url.openStream(), "UTF-8"));
 
@@ -54,8 +97,7 @@ public class MainClass {
 		in.close();
 	}
 
-	public static void xmlParser(String xml_url, String currency_type, ArrayList<Float> buyData,
-			ArrayList<Float> sellData) {
+	public static void xmlParser(String xml_url, String currency_type, ArrayList<Float> buyData, ArrayList<Float> sellData) {
 
 		String buyRate = null;
 		String sellRate = null;
@@ -80,6 +122,7 @@ public class MainClass {
 					symbols.setDecimalSeparator(',');
 					DecimalFormat format = new DecimalFormat("0.#");
 					format.setDecimalFormatSymbols(symbols);
+
 					try {
 						buyRateFLOAT = format.parse(buyRate).floatValue();
 						sellRateFLOAT = format.parse(sellRate).floatValue();
@@ -106,6 +149,7 @@ public class MainClass {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+
 	}
 
 	static float getAverage(ArrayList<Float> dataList) {
@@ -126,46 +170,11 @@ public class MainClass {
 	public static void main(String[] args) throws IOException {
 
 		Scanner userInput = new Scanner(System.in); // Create a Scanner object
-		System.out.println("Podaj dane <waluta> <data1> <data2>: ");
+		System.out.println("Input data: <currency initial_date last_date [yyyy-mm-dd]>: ");
 		String inputData = userInput.nextLine();
+		userInput.close();
+		 
+		urlAccess(inputData);
 
-		String currency = inputData.substring(0, 3);
-		String date_start = inputData.substring(4, 13);
-		String date_end = inputData.substring(15, 24);
-
-		String year_init = inputData.substring(4, 8);
-		String month_init = inputData.substring(9, 11);
-		String day_init = inputData.substring(12, 14);
-		String year_last = inputData.substring(15, 19);
-		String month_last = inputData.substring(20, 22);
-		String day_last = inputData.substring(23, 25);
-
-		String first_checker = year_init.substring(2, 4) + month_init + day_init;
-		String last_checker = year_last.substring(2, 4) + month_last + day_last;
-
-		ArrayList<Float> buyData = new ArrayList<Float>();
-		ArrayList<Float> sellData = new ArrayList<Float>();
-
-		// EUR 2018-05-10 2019-01-20
-
-		String basic_url = "https://www.nbp.pl/kursy/xml/dir";
-
-		for (int year = Integer.parseInt(year_init); year <= Integer.parseInt(year_last); ++year) {
-			URL url;
-			if (year != 2019) {
-				url = new URL(basic_url + Integer.toString(year) + ".txt");
-			} else {
-				url = new URL(basic_url + ".txt");
-			}
-
-			// zmienic na scanner (lepszy do parsowania)??
-
-			URLReader(url, currency, first_checker, last_checker, buyData, sellData);
-		}
-		String formattedBuyVal = String.format("%.04f", getAverage(buyData));
-		String formattedSellVal = String.format("%.04f", getStandDev(sellData));
-
-		System.out.println(formattedBuyVal);
-		System.out.println(formattedSellVal);
 	}
 }
