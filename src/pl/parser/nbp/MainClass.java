@@ -1,7 +1,5 @@
 package pl.parser.nbp;
 
-import java.util.Scanner;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -10,6 +8,7 @@ import java.net.URL;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.xml.parsers.DocumentBuilder;
@@ -21,100 +20,104 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.List;
 
 public class MainClass {
 
-	static void OutputPrinter(ArrayList<Float> buyData, ArrayList<Float> sellData) {
-		String formattedBuyVal = String.format("%.04f", getAverage(buyData));
-		String formattedSellVal = String.format("%.04f", getStandDev(sellData));
+	private static final GlobalCollection buyData = new GlobalCollection();
+	private static final GlobalCollection sellData = new GlobalCollection();
 
-		System.out.println(formattedBuyVal);
-		System.out.println(formattedSellVal);	
-	}
-	
-	public static void urlAccess(String inputData) throws IOException {
-		String currency = inputData.substring(0, 3);
+	private static final String[] CURRENCIES = { "USD", "EUR", "CHF", "GBP" };
+	private static final String DATA_FILE_PATTERN = "c[0-9]{3}z[0-9]{6}";
+	private static final String NBP_URL_TXT = "https://www.nbp.pl/kursy/xml/dir";
+	private static final String NBP_URL_XML = "https://www.nbp.pl/kursy/xml/";
+	private static final String TXT_EXTENSION = ".txt";
+	private static final String XML_EXTENSION = ".xml";
 
-		String year_init = inputData.substring(4, 8);
-		String month_init = inputData.substring(9, 11);
-		String day_init = inputData.substring(12, 14);
-		String year_last = inputData.substring(15, 19);
-		String month_last = inputData.substring(20, 22);
-		String day_last = inputData.substring(23, 25);
-
-		String first_checker = year_init.substring(2, 4) + month_init + day_init;
-		String last_checker = year_last.substring(2, 4) + month_last + day_last;
+	private static void urlAccess(String currency, String inputFirstDate, String inputSecondDate) throws IOException {
 		
-		ArrayList<Float> buyData = new ArrayList<Float>();
-		ArrayList<Float> sellData = new ArrayList<Float>();
-		
-		String basic_url = "https://www.nbp.pl/kursy/xml/dir";
-		for (int year = Integer.parseInt(year_init); year <= Integer.parseInt(year_last); ++year) {
-			URL url = null;
-			try {
-				if (year != 2019) {
-					url = new URL(basic_url + Integer.toString(year) + ".txt");
-				} else {
-					url = new URL(basic_url + ".txt");
+		String yearInit = inputFirstDate.substring(0, 4);
+		String monthInit = inputFirstDate.substring(5, 7);
+		String dayInit = inputFirstDate.substring(8, 10);
+		String yearLast = inputSecondDate.substring(0, 4);
+		String monthLast = inputSecondDate.substring(5, 7);
+		String dayLast = inputSecondDate.substring(8, 10);
+
+		String dateInit = yearInit.substring(2, 4) + monthInit + dayInit;
+		String dateLast = yearLast.substring(2, 4) + monthLast + dayLast;
+
+		if (isInputCorrect(dateInit, dateLast, currency)) {
+			for (int year = Integer.parseInt(yearInit); year <= Integer.parseInt(yearLast); ++year) {
+				URL url = null;
+				try {
+					if (isCurrentYear(year)) {
+						url = new URL(NBP_URL_TXT + TXT_EXTENSION);
+					} else {
+						url = new URL(NBP_URL_TXT + Integer.toString(year) + TXT_EXTENSION);
+					}
+				} catch (MalformedURLException e) {
+					e.printStackTrace();
 				}
-			} catch (MalformedURLException e) {
-				e.printStackTrace();
-			}
-			
-			txtReader(url, currency, first_checker, last_checker, buyData, sellData);
 
+				txtReader(url, currency, dateInit, dateLast);
+			}
+			OutputPrinter();
 		}
-		OutputPrinter(buyData, sellData);
 	}
 
-	public static void txtReader(URL url, String currency, String start, String end, ArrayList<Float> buyData,
-			ArrayList<Float> sellData) throws IOException {
-		BufferedReader in = new BufferedReader(new InputStreamReader(url.openStream(), "UTF-8"));
+	private static void txtReader(URL url, String currency, String start, String end) throws IOException {
+		BufferedReader bReader = new BufferedReader(new InputStreamReader(url.openStream(), "UTF-8"));
 
-		String line;
-		String subLine;
+		String xmlCode = null;
+		String currentDate = null;
+		String xmlURL = null;
 
-		String xml_url = null;
+		Pattern pattern = Pattern.compile(DATA_FILE_PATTERN);
+		while ((xmlCode = bReader.readLine()) != null) {
 
-		Pattern pattern = Pattern.compile("c[0-9]{3}z[0-9]{6}");
-		while ((line = in.readLine()) != null) {
-
-			if (line.length() == 12) {
-				line = line.substring(1, 12);
+			// in the first line of each txt file the special sign at the beginning has to be removed
+			if (xmlCode.length() == 12) {
+				xmlCode = xmlCode.substring(1, 12);
 			}
 
-			Matcher matcher = pattern.matcher(line);
+			Matcher matcher = pattern.matcher(xmlCode);
 			if (matcher.matches()) {
-				subLine = line.substring(5, 11);
-				if (Integer.parseInt(subLine) >= Integer.parseInt(start)
-						&& Integer.parseInt(subLine) <= Integer.parseInt(end)) {
 
-					xml_url = "https://www.nbp.pl/kursy/xml/" + line + ".xml";
-					xmlParser(xml_url, currency, buyData, sellData);
+				// currentDate is taken from the part of the xml code in txt file instead of
+				// "data_publikacji" term in xml file (dates are the same)
+				currentDate = xmlCode.substring(5, 11);
+
+				if (Integer.parseInt(currentDate) >= Integer.parseInt(start)
+						&& Integer.parseInt(currentDate) <= Integer.parseInt(end)) {
+
+					xmlURL = NBP_URL_XML + xmlCode + XML_EXTENSION;
+					xmlParser(xmlURL, currency);// buyData, sellData);
 				}
 			}
 		}
-		in.close();
+		bReader.close();
 	}
 
-	public static void xmlParser(String xml_url, String currency_type, ArrayList<Float> buyData, ArrayList<Float> sellData) {
-
+	private static void xmlParser(String xml_url, String currency_type) {
 		String buyRate = null;
 		String sellRate = null;
+		String currencyCode = null;
 		float buyRateFLOAT = 0;
 		float sellRateFLOAT = 0;
 
 		DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
 		try {
 
-			DocumentBuilder builder = factory.newDocumentBuilder();
-			Document doc = builder.parse(new URL(xml_url).openStream());
-			NodeList currencyList = doc.getElementsByTagName("pozycja");
+			DocumentBuilder docBuilder = factory.newDocumentBuilder();
+			Document xmlDoc = docBuilder.parse(new URL(xml_url).openStream());
+			NodeList currencyList = xmlDoc.getElementsByTagName("pozycja");
 			for (int i = 0; i < currencyList.getLength(); ++i) {
 				Node c = currencyList.item(i);
 				if (c.getNodeType() == Node.ELEMENT_NODE) {
 					Element currency = (Element) c;
-					String curr_name = currency.getElementsByTagName("kod_waluty").item(0).getTextContent();
+					currencyCode = currency.getElementsByTagName("kod_waluty").item(0).getTextContent();
 					buyRate = currency.getElementsByTagName("kurs_kupna").item(0).getTextContent();
 					sellRate = currency.getElementsByTagName("kurs_sprzedazy").item(0).getTextContent();
 
@@ -131,9 +134,9 @@ public class MainClass {
 						e.printStackTrace();
 					}
 
-					if (curr_name.equals(currency_type)) {
-						buyData.add(buyRateFLOAT);
-						sellData.add(sellRateFLOAT);
+					if (currencyCode.equals(currency_type)) {
+						buyData.addData(buyRateFLOAT);
+						sellData.addData(sellRateFLOAT);
 					}
 				}
 			}
@@ -152,6 +155,17 @@ public class MainClass {
 
 	}
 
+	static void OutputPrinter() {
+		float averageBuyData = getAverage(buyData.getData());
+		double standDevSellData = getStandDev(sellData.getData());
+
+		String formattedBuyValue = String.format("%.04f", averageBuyData);
+		String formattedSellValue = String.format("%.04f", standDevSellData);
+
+		System.out.println(formattedBuyValue);
+		System.out.println(formattedSellValue);
+	}
+
 	static float getAverage(ArrayList<Float> dataList) {
 		float sum = 0;
 		for (float element : dataList)
@@ -167,14 +181,30 @@ public class MainClass {
 		return Math.sqrt(temp / dataList.size());
 	}
 
-	public static void main(String[] args) throws IOException {
+	static boolean isInputCorrect(String dateInit, String dateLast, String currency) {
+		Date date = new Date();
+		String currentDate = new SimpleDateFormat("yyMMdd").format(date);
+		List<String> availableCurrencies = Arrays.asList(CURRENCIES);
+		boolean isCurrencyOk = availableCurrencies.contains(currency);
 
-		Scanner userInput = new Scanner(System.in); // Create a Scanner object
-		System.out.println("Input data: <currency initial_date last_date [yyyy-mm-dd]>: ");
-		String inputData = userInput.nextLine();
-		userInput.close();
-		 
-		urlAccess(inputData);
+		if (dateLast.compareTo(currentDate) <= 0 && dateLast.compareTo(dateInit) > 0 && isCurrencyOk) {
+			return true;
+		} else {
+			System.out.println("WRONG DATES OR CURRENCY!");
+			return false;
+		}
+	}
 
+	static boolean isCurrentYear(int year) {
+		String yearStr = String.valueOf(year);
+		Date date = new Date();
+		String currentYear = new SimpleDateFormat("yyyy").format(date);
+
+		return (yearStr.compareTo(currentYear) == 0) ? true : false;
+	}
+
+	public static void main(String[] inputData) throws IOException {
+
+		urlAccess(inputData[0], inputData[1], inputData[2]);
 	}
 }
